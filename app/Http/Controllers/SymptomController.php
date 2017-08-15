@@ -87,16 +87,16 @@ class SymptomController extends Controller
         $firstSymptom = $this->postParam('first_symptom');
         $subDivideSymptom = $this->postParam('sub_symptom');
         $sex = $this->postParam('sex');
-        $length = $this->postParam('length');
-        $weight = $this->postParam('weight');
-        $highPressure = $this->postParam('high_pressure');
-        $lowPressure = $this->postParam('low_pressure');
-        $temperature = $this->postParam('temperature');
-        $rhythm = $this->postParam('rhythm');
-        $pulse = $this->postParam('pulse');
-        $temperature = $this->postParam('temperature');
-        $FastingBloodGlucose = $this->postParam('fasting_blood_glucose');
+        $basicDiseases = $this->getBasicDisease();        
+        $selectedSymptom = $this->getSelectedSymptom($firstPart, $firstSymptom);
         
+        $subDivideSymptom = json_decode($subDivideSymptom);
+        $secondSymptoms = $this->getSecondSymptom($firstSymptom, $selectedSymptom);
+        if(!$subDivideSymptom) {
+            $firstSymptomToDisease = $this->getSecondSymptomByFirstSymptom($selectedSymptom, $basicDiseases);
+        } else {
+            $firstSymptomToDisease = $this->getSecondSymptomByFirstSymptom($subDivideSymptom, $basicDiseases);
+        }
     }
     
     public function reloadSymptomList() {
@@ -115,8 +115,60 @@ class SymptomController extends Controller
         $this->loadSymptoms();
     }
     
+    private function getSecondSymptomByFirstSymptom($selectedSymptom, $basicDisease, $subSymptoms) {
+        if(!static::$symptom) {
+            $this->loadSymptoms();
+        }
+        if(static::$symptom[$selectedSymptom['症状'].'_|_'.$selectedSymptom['部位']]['symptom']['istypical'] != '0') {
+            return $basicDisease;
+        }
+        $diseases = static::$symptom[$selectedSymptom['症状'].'_|_'.$selectedSymptom['部位']]['disease'];
+        $diseases = array_merge($diseases, $basicDisease);
+        return $diseases;
+    }
+    
+    private function getSelectedSymptom($firstPart, $firstSymptom) {
+        $symptomArr = \DB::select("SELECT * FROM `symptomDatabased` where 症状=?",[$firstSymptom]);
+        $selectedSymptom = [];
+        foreach($symptomArr as $symptom) {
+            $selectedSymptom[] = $this->ObjectToArray($symptom);
+        }
+        return $selectedSymptom;
+    }
+    
+    private function getSecondSymptom($firstSymptom, $selectedSymptom) {
+        
+        $symptomArr = \DB::select("SELECT * FROM `Symptomtosubdivide` where 一级症状=?",[$firstSymptom]);
+        $secondSymptom = [];
+        foreach($symptomArr as $symptom) {
+            $symptom = $this->ObjectToArray($symptom);
+            for($i=1; $i<400; $i++) {                
+                if($symptom['典型非典型'.$i] != '' && $symptom['典型非典型'.$i] == 0) {
+                    $secondSymptom[] = $symptom['二级症状'.$i];
+                }                
+            }
+            
+        }
+        return $secondSymptom;
+    }
+    
     private function getBasicDisease() {
-        //
+        $height = $this->postParam('height');
+        $weight = $this->postParam('weight');
+        $highPressure = $this->postParam('high_pressure');
+        $lowPressure = $this->postParam('low_pressure');
+        $temperature = $this->postParam('temperature');
+        $rhythm = $this->postParam('rhythm');
+        $pulse = $this->postParam('pulse');
+        $bloodGlucose = $this->postParam('blood_glucose');
+        $disease = [];
+        $disease = array_merge($disease, $this->bmiDisease($height, $weight));
+        $disease = array_merge($this->pressureDisease($highPressure, $lowPressure));
+        $disease = array_merge($this->temperatureDisease($temperature));
+        $disease = array_merge($this->rhythmDisease($rhythm));
+        $disease = array_merge($this->pulseDisease($pulse));
+        $disease = array_merge($this->bloodGlucoseDisease($bloodGlucose));
+        return $disease;
     }
     
     private function bmiDisease($height, $weight) {
@@ -257,13 +309,13 @@ class SymptomController extends Controller
         }
         foreach(static::$disease as $disease) {
             foreach($disease['symptom'] as $symptom) {
-                if(!in_array($symptom['name'], static::$symptom)) {
-                    static::$symptom[$symptom['name']] = [
+                if(!in_array($symptom['name'].'_|_'.$symptom['part'].'_|_'.$symptom['subsymptom'].'_|_'.$symptom['istypical'], static::$symptom)) {
+                    static::$symptom[$symptom['name'].'_|_'.$symptom['part'].'_|_'.$symptom['subsymptom'].'_|_'.$symptom['istypical']] = [
                         'symptom'=>$symptom,
                         'disease'=>[]
                     ];               
                 }
-                static::$symptom[$symptom['name']]['disease'][] = $disease['disease']['name'];
+                static::$symptom[$symptom['name'].'_|_'.$symptom['part'].'_|_'.$symptom['subsymptom'].'_|_'.$symptom['istypical']]['disease'][] = $disease['disease']['name'];
                 
             }
             
